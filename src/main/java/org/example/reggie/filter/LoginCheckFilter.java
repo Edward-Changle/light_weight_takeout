@@ -29,53 +29,29 @@ public class LoginCheckFilter implements Filter {
         // 1. Get URI of the current request
         String requestURI = request.getRequestURI();
 
-        log.info("Block the request: {}", requestURI);
-
-        // Define some urls that needn't be filtered
-        String[] urls = new String[] {
-                "/employee/login",
-                "/employee/logout",
-                "/backend/**",
-                "/front/**",
-                "/common/**",
-                "/user/sendMsg", // 移动端发送短信
-                "/user/login" // 移动端登陆
-        };
-
-        // 2. Check if the current request should be handled
-        boolean check = check(urls, requestURI);
-
-        // 3. If not, then pass it
-        if (check) {
+        // 2. If no need login url, then pass it
+        if (isNoLoginNeeded(requestURI)) {
             log.info("The current request {} needn't be handled.", requestURI);
             filterChain.doFilter(request, response);
             return;
         }
-
         log.info("The user has not logged.");
-        // 4.1 Check the status, if already logging, pass it
-        if (request.getSession().getAttribute("employee") != null) {
-            log.info("The user has already logged and the user's ID is: {}", request.getSession().getAttribute("employee"));
 
-            Long empId = (Long) request.getSession().getAttribute("employee");
-            BaseContext.setCurrentId(empId);
+        // 3. check the login status from desktop & mobile
+        String[] userIDs = new String[] {"employee", "user"};
+        for (String userID : userIDs) {
+            if (request.getSession().getAttribute(userID) != null) {
+                log.info("The user has already logged and the user's ID is: {}", request.getSession().getAttribute(userID));
 
-            filterChain.doFilter(request, response);
-            return;
+                Long id = (Long) request.getSession().getAttribute(userID);
+                BaseContext.setCurrentId(id);
+
+                filterChain.doFilter(request, response);
+                return;
+            }
         }
 
-        // 4.2 Check the status, if already logging, pass it -- mobile-side users
-        if (request.getSession().getAttribute("user") != null) {
-            log.info("The user has already logged and the user's ID is: {}", request.getSession().getAttribute("user"));
-
-            Long userId = (Long) request.getSession().getAttribute("user");
-            BaseContext.setCurrentId(userId);
-
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        // 5. If not, redirect to the login page
+        // 4. If not, redirect to the login page
         // 判断逻辑根据前端页面的相应拦截器里规定的内容
         response.getWriter().write(JSON.toJSONString(R.error("NOTLOGIN")));
         return;
@@ -87,7 +63,18 @@ public class LoginCheckFilter implements Filter {
      * @param requestURI
      * @return
      */
-    public boolean check(String[] urls, String requestURI) {
+    private boolean isNoLoginNeeded(String requestURI) {
+        // Define some urls that needn't be filtered
+        String[] urls = new String[] {
+                "/employee/login",
+                "/employee/logout",
+                "/backend/**",
+                "/front/**",
+                "/common/**",
+                "/user/sendMsg", // 移动端发送短信
+                "/user/login" // 移动端登陆
+        };
+        
         for (String url : urls) {
             boolean match = PATH_MATCHER.match(url, requestURI);
             if (match) {
